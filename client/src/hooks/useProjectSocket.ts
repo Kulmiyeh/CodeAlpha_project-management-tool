@@ -19,9 +19,15 @@ export function useProjectSocket(opts: Options = {}): void {
     const socket = getSocket();
     if (!socket) return;
 
-    if (projectId) {
-      socket.emit('project:join', projectId);
-    }
+    const joinRoom = () => {
+      if (projectId) socket.emit('project:join', projectId);
+    };
+
+    // Join immediately if already connected, and also re-join on every
+    // (re)connect so the room survives socket reconnects (server-side rooms
+    // are per-socket instance and lost when the socket disconnects).
+    if (socket.connected) joinRoom();
+    socket.on('connect', joinRoom);
 
     const handleTaskCreated = (payload: { task: Task }) => upsertTaskLocal(payload.task);
     const handleTaskUpdated = (payload: { task: Task }) => upsertTaskLocal(payload.task);
@@ -49,6 +55,7 @@ export function useProjectSocket(opts: Options = {}): void {
 
     return () => {
       if (projectId) socket.emit('project:leave', projectId);
+      socket.off('connect', joinRoom);
       socket.off('task:created', handleTaskCreated);
       socket.off('task:updated', handleTaskUpdated);
       socket.off('task:deleted', handleTaskDeleted);
